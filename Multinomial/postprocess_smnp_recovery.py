@@ -168,19 +168,33 @@ def component_summary(df):
     out = []
     for vals, g in df.groupby(keys, dropna=False):
         row = dict(zip(keys, vals))
+
+        n_rep = g['replicate'].nunique()
+        mean_est = g['post_mean'].mean()
+        bias = g['bias'].mean()
+        empirical_se = g['post_mean'].std(ddof=1) if n_rep > 1 else np.nan
+        rmse = np.sqrt(g['squared_error'].mean())
+        bias_sq = bias ** 2
+        variability = ((n_rep - 1) / n_rep) * empirical_se ** 2 if n_rep > 1 else np.nan
+        rmse_from_bias_se = np.sqrt(bias_sq + variability) if n_rep > 1 else np.nan
+
         row.update({
-            'n_replicates': g['replicate'].nunique(),
+            'n_replicates': n_rep,
             'truth': g['truth'].iloc[0],
-            'mean_estimate': g['post_mean'].mean(),
-            'mc_bias': g['bias'].mean(),
-            'mc_rmse': np.sqrt(g['squared_error'].mean()),
+            'mean_estimate': mean_est,
+            'mc_bias': bias,
+            'empirical_se': empirical_se,
+            'mc_rmse': rmse,
+            'bias_sq': bias_sq,
+            'variability_contribution': variability,
+            'rmse_from_bias_se': rmse_from_bias_se,
             'coverage_95': g['coverage_95'].mean(),
             'mean_ci_width': g['ci_width'].mean(),
             'mean_rhat': g['rhat'].mean(),
             'max_rhat': g['rhat'].max(),
             'median_ess_bulk': g['ess_bulk'].median(),
             'min_ess_bulk': g['ess_bulk'].min(),
-            'median_ess_tail': g['ess_tail'].median()
+            'median_ess_tail': g['ess_tail'].median(),
         })
         out.append(row)
     return pd.DataFrame(out)
@@ -191,15 +205,31 @@ def block_summary(df):
     out = []
     for vals, g in df.groupby(keys, dropna=False):
         row = dict(zip(keys, vals))
+
+        by_param = g.groupby('parameter', dropna=False)
+        param_bias = by_param['bias'].mean()
+        param_se = by_param['post_mean'].std(ddof=1)
+        param_n = by_param['replicate'].nunique().astype(float)
+
+        total_n = param_n.sum()
+        weighted_bias_sq = np.sum(param_n * (param_bias ** 2)) / total_n
+        weighted_variability = np.sum((param_n - 1.0) * (param_se ** 2)) / total_n
+        rmse_from_bias_se = np.sqrt(weighted_bias_sq + weighted_variability)
+
         row.update({
             'n_replicates': g['replicate'].nunique(),
             'n_components': g['parameter'].nunique(),
             'mc_rmse_pool': np.sqrt(g['squared_error'].mean()),
             'mean_absolute_bias': g['bias'].abs().mean(),
+            'mean_bias': param_bias.mean(),
+            'mean_empirical_se': param_se.mean(),
+            'weighted_mean_bias_sq': weighted_bias_sq,
+            'weighted_variability_contribution': weighted_variability,
+            'rmse_from_bias_se': rmse_from_bias_se,
             'mean_coverage_95': g['coverage_95'].mean(),
             'mean_ci_width': g['ci_width'].mean(),
             'max_rhat': g['rhat'].max(),
-            'min_ess_bulk': g['ess_bulk'].min()
+            'min_ess_bulk': g['ess_bulk'].min(),
         })
         out.append(row)
     return pd.DataFrame(out)
