@@ -1,55 +1,107 @@
+"""
+This script reads the predictive_ALL_test_summary csv file and plot Figure 1.
+"""
+
+import os
+import pandas as pd
 import matplotlib.pyplot as plt
 
-from aggregate_predictive import aggregate_predictive
+# The summary_csv here is obtained by running:
+# python aggregate_predictive.py "{args.output_root}/predictive/*/*/*/test_raw.tsv" predictive_ALL_test_summary.csv
 
-results_root = "./results"
+summary_csv = "predictive_ALL_test_summary.csv"  # CSV manifest is obtained by running aggregate
+output_dir = "binary_predictive_figures"
 link_type = "probit"
+
 data_types = ("cloglog", "probit")
 model_types = ("skewed", "non_skewed")
-metrics = ("accuracy_mean", "AUC_mean", "f1_score_mean", "Log_loss_mean", "elpd_loo_mean", "elpd_loo_std")
-metric_labels = ("Accuracy", "AUC", "F1 score", "Log loss", "ELPD-LOO", "ELPD-LOO SE")
+
+metrics = (("accuracy_mean", "Accuracy", "accuracy"), ("AUC_mean", "AUC", "auc"),
+           ("f1_score_mean", "F1 score", "f1_score"), ("Log_loss_mean", "Log loss", "log_loss"),
+           ("Brier_score_mean", "Brier score", "Brier_score"))
+model_labels = {"skewed": "skewed", "non_skewed": "non-skewed"}
+model_styles = {"skewed": dict(marker="o", linestyle="-", linewidth=2.2, markersize=6),
+                "non_skewed": dict(marker="s", linestyle="--", linewidth=2.2, markersize=6)}
+
+label_fontsize = 25
+title_fontsize = 17
+tick_fontsize = 17
+legend_fontsize = 13
+
+def load_predictive_summary(csv_path=summary_csv, link_type=link_type):
+    df = pd.read_csv(csv_path)
+    required = {"num_samples", "data_type", "model_type", "link_type"}
+    required.update(metric for metric, _, _ in metrics)
+    missing = sorted(required.difference(df.columns))
+    if missing:
+        raise ValueError("The summary file is missing required columns: " + ", ".join(missing))
+    df = df[df["link_type"] == link_type].copy()
+    if df.empty:
+        raise ValueError(f"No rows found for link_type={link_type!r} in {csv_path}")
+    return df
 
 
-def load_summary(results_root=results_root, link_type=link_type):
-    pattern = f"{results_root}/predictive/*/*/{link_type}/test_raw.tsv"
-    return aggregate_predictive(pattern)
+def _plot_models(ax, df, data_type, metric):
+    """ Draw skewed and non-skewed model lines for one data type/metric. """
+    sample_sizes = sorted(df["num_samples"].unique())
+    x_positions = list(range(len(sample_sizes)))
+    x_lookup = {n: i for i, n in enumerate(sample_sizes)}
+    for model_type in model_types:
+        subset = df[(df["data_type"] == data_type) & (df["model_type"] == model_type)].sort_values("num_samples")
+        if subset.empty:
+            continue
+        x = [x_lookup[n] for n in subset["num_samples"]]
+        ax.plot(x, subset[metric], label=model_labels[model_type], **model_styles[model_type])
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels([str(n) for n in sample_sizes], fontsize=tick_fontsize)
+    ax.tick_params(axis="y", labelsize=tick_fontsize)
+    ax.grid(False)
+
+    return x_positions, sample_sizes
 
 
-def plot_figure1(df, data_types=data_types, model_types=model_types,
-                 metrics=metrics, metric_labels=metric_labels,
-                 link_type=link_type, savepath=None):
-    fig, axes = plt.subplots(nrows=len(data_types), ncols=len(metrics), figsize=(4 * len(metrics), 4 * len(data_types)), sharex=True, sharey=False)
-    fig.subplots_adjust(hspace=0.4, wspace=0.35)
+def plot_combined(df, output_dir=output_dir, filename="binary_predictive_combined"):
+    os.makedirs(output_dir, exist_ok=True)
+    fig, axes = plt.subplots(nrows=2, ncols=5, figsize=(24, 8), sharex="col", sharey=False)
+    fig.subplots_adjust(left=0.07, right=0.99, bottom=0.12, top=0.91, wspace=0.26, hspace=0.08)
 
-    for row_idx, data_type in enumerate(data_types):
-        for col_idx, (metric, label) in enumerate(zip(metrics, metric_labels)):
-            ax = axes[row_idx, col_idx]
-            for model in model_types:
-                subset = df[(df["data_type"] == data_type) & (df["model_type"] == model)]
-                subset = subset.sort_values("num_samples")
-                if metric not in subset.columns:
-                    continue
-                ax.plot(subset["num_samples"], subset[metric], marker='o', label=model)
+    for col_idx, (metric, metric_label, _) in enumerate(metrics):
+        ax = axes[0, col_idx]
+        x_positions, sample_sizes = _plot_models(ax=ax, df=df, data_type="cloglog", metric=metric)
+        ax.set_title(metric_label, fontsize=title_fontsize, pad=10)
+        if col_idx == 0:
+            ax.set_ylabel("Cloglog Data", fontsize=label_fontsize)
+            ax.legend(fontsize=legend_fontsize, frameon=False)
+        ax.tick_params(axis="x", which="both", bottom=False, top=False, labelbottom=False)
+        ax.set_xlabel("")
 
-            if row_idx == 0:
-                ax.set_title(label, fontsize=13)
-            if col_idx == 0:
-                ax.set_ylabel(f"{data_type.capitalize()}-data", fontsize=13)
-            if row_idx == len(data_types) - 1:
-                ax.set_xlabel("Number of samples", fontsize=11)
-            if row_idx == 0 and col_idx == len(metrics) - 1:
-                ax.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=11)
+    for col_idx, (metric, _, _) in enumerate(metrics):
+        ax = axes[1, col_idx]
+        x_positions, sample_sizes = _plot_models(ax=ax, df=df, data_type="probit", metric=metric)
+        ax.set_title("")
+        if col_idx == 0:
+            ax.set_ylabel("Probit Data", fontsize=label_fontsize)
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels([str(n) for n in sample_sizes], fontsize=tick_fontsize)
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
 
-    fig.suptitle(f"Skewed vs. non-skewed binary models, fitted with a {link_type} link ", fontsize=14, y=1.02)
-    plt.tight_layout()
-    if savepath:
-        plt.savefig(savepath, bbox_inches='tight', dpi=150)
-        print(f"Saved to {savepath}")
-    else:
-        plt.show()
-    return fig
+    base = os.path.join(output_dir, filename)
+    saved = []
+
+    path = base + ".pdf"
+    fig.supxlabel("Sample Sizes", fontsize=label_fontsize)
+    fig.savefig(path, bbox_inches="tight")
+    saved.append(path)
+    plt.close(fig)
+
+    return saved
 
 
 if __name__ == "__main__":
-    summary = load_summary()
-    plot_figure1(summary, savepath="figure1.png")
+    df = load_predictive_summary()
+    combined_files = plot_combined(df)
+    for path in combined_files:
+        print(f"{path}")

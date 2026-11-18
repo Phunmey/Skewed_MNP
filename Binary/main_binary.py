@@ -30,7 +30,7 @@ def _ensure_dir(*parts):
 
 def main_predictive(output_root, n_grid=n_grid, data_types=data_types, model_types=model_types,
                     link_types=link_types, n_replicates=n_replicates, draws=2000, tune=3000, chains=4,
-                     cores=None, mp_ctx='fork', base_seed=base_seed, save_plots=False):
+                     cores=None, mp_ctx=None, base_seed=base_seed, save_plots=False):
     for data_type in data_types:
         for modeltype in model_types:
             for linktype in link_types:
@@ -75,7 +75,7 @@ def main_predictive(output_root, n_grid=n_grid, data_types=data_types, model_typ
 
 def main_recovery(output_root, n_grid=n_grid, data_types=data_types, model_types=model_types,
                   link_types=link_types, n_replicates=n_replicates, draws=2000, tune=3000, chains=4,
-                  cores=None, mp_ctx='fork', base_seed=base_seed, save_plots=False):
+                  cores=None, mp_ctx=None, base_seed=base_seed, save_plots=False):
     for data_type in data_types:
         true_beta_ = true_beta[data_type]
         for modeltype in model_types:
@@ -132,10 +132,11 @@ if __name__ == "__main__":
     parser.add_argument('--save-plots', action='store_true', help="Save trace/ppc diagnostic figures per run.")
     parser.add_argument('--base-seed', type=int, default=base_seed, help="Base RNG seed")
     parser.add_argument('--cores', type=int, default=None, help="Parallel processes for pm.sample.")
-    parser.add_argument('--mp-ctx', default='fork', help="Multiprocessing context.")
+    parser.add_argument('--mp-ctx', default='auto', choices=["auto", "spawn", "fork", "forkserver"],
+                        help="Multiprocessing context.")
 
     args = parser.parse_args()
-    mp_ctx = args.mp_ctx if args.mp_ctx else None
+    mp_ctx = None if args.mp_ctx == 'auto' else args.mp_ctx
 
     common = dict(n_grid=args.n_values, data_types=args.data_types, model_types=args.model_types,
                   link_types=args.link_types, n_replicates=args.n_replicates,
@@ -150,11 +151,11 @@ if __name__ == "__main__":
 
     print(f"\nDone. Each (data_type, model_type, link_type) combination has its own folder under "
           f"{args.output_root}/{{recovery,predictive}}/, e.g.:")
-    print(f"  {args.output_root}/recovery/cloglog/skewed/probit/summary.csv")
-    print(f"  {args.output_root}/predictive/cloglog/skewed/probit/test_summary.csv")
+    print(f"{args.output_root}/recovery/cloglog/skewed/probit/summary.csv")
+    print(f"{args.output_root}/predictive/cloglog/skewed/probit/test_summary.csv")
     if args.save_plots:
-        print(f"  {args.output_root}/recovery/cloglog/skewed/link-probit/n200_rep00/trace_....png")
+        print(f"{args.output_root}/recovery/cloglog/skewed/link-probit/n200_rep00/trace_....png")
     print(f"\nTo combine everything across combinations into one master file:")
-    print(f'  python aggregate_recovery.py "{args.output_root}/recovery/*/*/*/raw.csv" recovery_ALL_summary.csv')
+    print(f'python aggregate_recovery.py "{args.output_root}/recovery/*/*/*/raw.csv" recovery_ALL_summary.csv')
     print(
-        f'  python aggregate_predictive.py "{args.output_root}/predictive/*/*/*/test_raw.tsv" predictive_ALL_test_summary.csv')
+        f'python aggregate_predictive.py "{args.output_root}/predictive/*/*/*/test_raw.tsv" predictive_ALL_test_summary.csv')

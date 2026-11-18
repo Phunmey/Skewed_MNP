@@ -55,7 +55,7 @@ def _build_pymc_model(use_features, x_data, y_data, model_type='non_skewed', lin
 
 
 def build_model_recovery(use_features, x_full, y_full, sample, replicate, model_type='non_skewed',
-                         link_type='logistic', draws=2000, tune=3000, chains=4, cores=None, mp_ctx='fork',
+                         link_type='logistic', draws=2000, tune=3000, chains=4, cores=None, mp_ctx=None,
                          target_accept=0.95, seed=random_seed, save_plots=True, plot_dir='.'):
     print(f"[recovery] building model: n={sample} rep={replicate} {model_type}/{link_type}")
     start = time()
@@ -94,7 +94,7 @@ def build_model_recovery(use_features, x_full, y_full, sample, replicate, model_
 
 def build_model_predictive(file1, file2, use_features, xtrain, ytrain, xtest, ytest, sample,
                            replicate, model_type='non_skewed', link_type='logistic',
-                           draws=2000, tune=3000, chains=4, cores=None, mp_ctx='fork', target_accept=0.95,
+                           draws=2000, tune=3000, chains=4, cores=None, mp_ctx=None, target_accept=0.95,
                            seed=random_seed, save_plots=False, plot_dir='.'):
     print(f"predictive model: n={sample} rep={replicate} {model_type}/{link_type}")
     start1 = time()
